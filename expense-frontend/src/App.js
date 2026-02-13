@@ -1,67 +1,132 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
+
+const API = "https://expense-tracker-rpa8.onrender.com/api";
 
 function App() {
   const [page, setPage] = useState("login");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem("token"));
 
   // ---------------- AUTH ----------------
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = () => {
-    if (email && password) {
-      setIsLoggedIn(true);
-      setPage("dashboard");
+  const handleRegister = async () => {
+    try {
+      const res = await fetch(`${API}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert("Registered Successfully!");
+        setPage("login");
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      alert("Registration failed");
     }
   };
 
-  const handleRegister = () => {
-    if (name && email && password) {
-      alert("Registered Successfully!");
-      setPage("login");
+  const handleLogin = async () => {
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        setToken(data.token);
+        setIsLoggedIn(true);
+        setPage("dashboard");
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      alert("Login failed");
     }
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setEmail("");
-    setPassword("");
-    setPage("login");
-  };
-
-  const handleDeleteAccount = () => {
-    alert("Account Deleted");
+    localStorage.removeItem("token");
     setIsLoggedIn(false);
     setPage("login");
   };
 
   // ---------------- EXPENSE ----------------
-
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [expenses, setExpenses] = useState([]);
 
-  const addExpense = () => {
+  const fetchExpenses = async () => {
+    try {
+      const res = await fetch(`${API}/expenses`, {
+        headers: { Authorization: token },
+      });
+      const data = await res.json();
+      if (res.ok) setExpenses(data);
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      setIsLoggedIn(true);
+      setPage("dashboard");
+      fetchExpenses();
+    }
+  }, [token]);
+
+  const addExpense = async () => {
     if (!title || !amount) return;
-    setExpenses([
-      ...expenses,
-      { id: Date.now(), title, amount: Number(amount) },
-    ]);
-    setTitle("");
-    setAmount("");
+
+    try {
+      const res = await fetch(`${API}/expenses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token,
+        },
+        body: JSON.stringify({ title, amount }),
+      });
+
+      if (res.ok) {
+        fetchExpenses();
+        setTitle("");
+        setAmount("");
+      }
+    } catch (err) {
+      console.log(err);
+    }
   };
 
-  const deleteExpense = (id) => {
-    setExpenses(expenses.filter((exp) => exp.id !== id));
+  const deleteExpense = async (id) => {
+    try {
+      await fetch(`${API}/expenses/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: token },
+      });
+      fetchExpenses();
+    } catch (err) {
+      console.log(err);
+    }
   };
 
-  const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const total = expenses.reduce(
+    (sum, exp) => sum + Number(exp.amount),
+    0
+  );
 
   // ---------------- SPLIT ----------------
-
   const [members, setMembers] = useState([
     { id: 1, name: "", spent: 0 },
   ]);
@@ -94,99 +159,70 @@ function App() {
     members.length > 0 ? splitTotal / members.length : 0;
 
   // ---------------- UI ----------------
-
   return (
     <div className="app-container">
-      {/* LOGIN PAGE */}
       {page === "login" && (
         <div className="card">
           <h2>Login</h2>
           <input
             type="email"
             placeholder="Email"
-            value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
             type="password"
             placeholder="Password"
-            value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           <button className="primary-btn" onClick={handleLogin}>
             Login
           </button>
-          <p>
-            Don't have account?{" "}
-            <span
-              className="link"
-              onClick={() => setPage("register")}
-            >
-              Register
-            </span>
+          <p onClick={() => setPage("register")} className="link">
+            Create Account
           </p>
         </div>
       )}
 
-      {/* REGISTER PAGE */}
       {page === "register" && (
         <div className="card">
           <h2>Register</h2>
           <input
-            type="text"
             placeholder="Name"
-            value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <input
-            type="email"
             placeholder="Email"
-            value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
             type="password"
             placeholder="Password"
-            value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <button className="primary-btn" onClick={handleRegister}>
+          <button
+            className="primary-btn"
+            onClick={handleRegister}
+          >
             Register
           </button>
-          <p>
-            Already have account?{" "}
-            <span
-              className="link"
-              onClick={() => setPage("login")}
-            >
-              Login
-            </span>
+          <p onClick={() => setPage("login")} className="link">
+            Back to Login
           </p>
         </div>
       )}
 
-      {/* DASHBOARD */}
-      {page === "dashboard" && isLoggedIn && (
+      {page === "dashboard" && (
         <div className="card">
           <div className="top-bar">
             <button onClick={() => setPage("split")}>
               Split Expenses
             </button>
-            <div>
-              <button onClick={handleLogout}>Logout</button>
-              <button
-                className="danger-btn"
-                onClick={handleDeleteAccount}
-              >
-                Delete Account
-              </button>
-            </div>
+            <button onClick={handleLogout}>Logout</button>
           </div>
 
           <h2>Expense Dashboard</h2>
 
           <input
-            type="text"
             placeholder="Expense Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -202,11 +238,11 @@ function App() {
           </button>
 
           {expenses.map((exp) => (
-            <div key={exp.id} className="expense-item">
+            <div key={exp._id} className="expense-item">
               {exp.title} - ₹{exp.amount}
               <button
                 className="danger-btn"
-                onClick={() => deleteExpense(exp.id)}
+                onClick={() => deleteExpense(exp._id)}
               >
                 X
               </button>
@@ -217,13 +253,11 @@ function App() {
         </div>
       )}
 
-      {/* SPLIT PAGE */}
       {page === "split" && (
         <div className="card">
           <button onClick={() => setPage("dashboard")}>
             ← Back
           </button>
-
           <h2>Split Expenses</h2>
 
           {members.map((member) => (
