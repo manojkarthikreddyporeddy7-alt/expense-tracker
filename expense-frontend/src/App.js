@@ -1,255 +1,273 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 import "./App.css";
-import { Pie } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
-
-const API = "http://localhost:5000/api";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [page, setPage] = useState("login");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // ---------------- AUTH ----------------
+
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [expenses, setExpenses] = useState([]);
+
+  const handleLogin = () => {
+    if (email && password) {
+      setIsLoggedIn(true);
+      setPage("dashboard");
+    }
+  };
+
+  const handleRegister = () => {
+    if (name && email && password) {
+      alert("Registered Successfully!");
+      setPage("login");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setEmail("");
+    setPassword("");
+    setPage("login");
+  };
+
+  const handleDeleteAccount = () => {
+    alert("Account Deleted");
+    setIsLoggedIn(false);
+    setPage("login");
+  };
+
+  // ---------------- EXPENSE ----------------
+
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("Food");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("");
+  const [expenses, setExpenses] = useState([]);
 
-  // ================= LOGIN =================
-  const login = async () => {
-    try {
-      const res = await axios.post(`${API}/auth/login`, {
-        email,
-        password,
-      });
-
-      localStorage.setItem("token", res.data.token);
-      setToken(res.data.token);
-    } catch (err) {
-      alert("Invalid credentials");
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    setToken(null);
-    setExpenses([]);
-  };
-
-  // ================= FETCH EXPENSES =================
-  const fetchExpenses = async () => {
-    try {
-      const res = await axios.get(`${API}/expenses`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setExpenses(res.data);
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  useEffect(() => {
-    if (token) fetchExpenses();
-  }, [token]);
-
-  // ================= ADD EXPENSE =================
-  const addExpense = async () => {
+  const addExpense = () => {
     if (!title || !amount) return;
-
-    await axios.post(
-      `${API}/expenses`,
-      { title, amount, category },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
+    setExpenses([
+      ...expenses,
+      { id: Date.now(), title, amount: Number(amount) },
+    ]);
     setTitle("");
     setAmount("");
-    fetchExpenses();
   };
 
-  // ================= DELETE =================
-  const deleteExpense = async (id) => {
-    await axios.delete(`${API}/expenses/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    fetchExpenses();
+  const deleteExpense = (id) => {
+    setExpenses(expenses.filter((exp) => exp.id !== id));
   };
 
-  // ================= UPDATE =================
-  const updateExpense = async (id) => {
-    const newTitle = prompt("Enter new title:");
-    const newAmount = prompt("Enter new amount:");
+  const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-    if (!newTitle || !newAmount) return;
+  // ---------------- SPLIT ----------------
 
-    await axios.put(
-      `${API}/expenses/${id}`,
-      {
-        title: newTitle,
-        amount: newAmount,
-      },
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+  const [members, setMembers] = useState([
+    { id: 1, name: "", spent: 0 },
+  ]);
+
+  const addMember = () => {
+    setMembers([
+      ...members,
+      { id: Date.now(), name: "", spent: 0 },
+    ]);
+  };
+
+  const removeMember = (id) => {
+    setMembers(members.filter((m) => m.id !== id));
+  };
+
+  const updateMember = (id, field, value) => {
+    setMembers(
+      members.map((m) =>
+        m.id === id ? { ...m, [field]: value } : m
+      )
     );
-
-    fetchExpenses();
   };
 
-  // ================= SEARCH + FILTER =================
-  const filteredExpenses = expenses
-    .filter((exp) =>
-      exp.title.toLowerCase().includes(search.toLowerCase())
-    )
-    .filter((exp) =>
-      filter ? exp.category === filter : true
-    );
-
-  // ================= TOTAL =================
-  const total = filteredExpenses.reduce(
-    (sum, exp) => sum + Number(exp.amount),
+  const splitTotal = members.reduce(
+    (sum, m) => sum + Number(m.spent),
     0
   );
 
-  // ================= CHART DATA =================
-  const categoryTotals = {};
+  const perPerson =
+    members.length > 0 ? splitTotal / members.length : 0;
 
-  expenses.forEach((exp) => {
-    if (!categoryTotals[exp.category]) {
-      categoryTotals[exp.category] = 0;
-    }
-    categoryTotals[exp.category] += Number(exp.amount);
-  });
+  // ---------------- UI ----------------
 
-  const chartData = {
-    labels: Object.keys(categoryTotals),
-    datasets: [
-      {
-        data: Object.values(categoryTotals),
-        backgroundColor: [
-          "#FF6384",
-          "#36A2EB",
-          "#FFCE56",
-          "#4CAF50",
-        ],
-      },
-    ],
-  };
-
-  // ================= LOGIN SCREEN =================
-  if (!token) {
-    return (
-      <div style={{ padding: 40 }}>
-        <h2>Login</h2>
-        <input
-          placeholder="Email"
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <br /><br />
-        <input
-          type="password"
-          placeholder="Password"
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <br /><br />
-        <button onClick={login}>Login</button>
-      </div>
-    );
-  }
-
-  // ================= MAIN UI =================
   return (
-    <div className="container">
-      <div className="card">
-        <div className="header">
-          <h2>Expense Tracker</h2>
-          <button className="logout" onClick={logout}>
-            Logout
-          </button>
-        </div>
-
-        {/* ADD EXPENSE */}
-        <div className="add-section">
+    <div className="app-container">
+      {/* LOGIN PAGE */}
+      {page === "login" && (
+        <div className="card">
+          <h2>Login</h2>
           <input
-            placeholder="Title"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="primary-btn" onClick={handleLogin}>
+            Login
+          </button>
+          <p>
+            Don't have account?{" "}
+            <span
+              className="link"
+              onClick={() => setPage("register")}
+            >
+              Register
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* REGISTER PAGE */}
+      {page === "register" && (
+        <div className="card">
+          <h2>Register</h2>
+          <input
+            type="text"
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="primary-btn" onClick={handleRegister}>
+            Register
+          </button>
+          <p>
+            Already have account?{" "}
+            <span
+              className="link"
+              onClick={() => setPage("login")}
+            >
+              Login
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* DASHBOARD */}
+      {page === "dashboard" && isLoggedIn && (
+        <div className="card">
+          <div className="top-bar">
+            <button onClick={() => setPage("split")}>
+              Split Expenses
+            </button>
+            <div>
+              <button onClick={handleLogout}>Logout</button>
+              <button
+                className="danger-btn"
+                onClick={handleDeleteAccount}
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+
+          <h2>Expense Dashboard</h2>
+
+          <input
+            type="text"
+            placeholder="Expense Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
           <input
+            type="number"
             placeholder="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
+          <button className="primary-btn" onClick={addExpense}>
+            Add Expense
+          </button>
 
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="Food">Food</option>
-            <option value="Travel">Travel</option>
-            <option value="Bills">Bills</option>
-            <option value="Shopping">Shopping</option>
-          </select>
-
-          <button onClick={addExpense}>Add</button>
-        </div>
-
-        {/* SEARCH + FILTER */}
-        <div className="search-filter">
-          <input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-
-          <select onChange={(e) => setFilter(e.target.value)}>
-            <option value="">All Categories</option>
-            <option value="Food">Food</option>
-            <option value="Travel">Travel</option>
-            <option value="Bills">Bills</option>
-            <option value="Shopping">Shopping</option>
-          </select>
-        </div>
-
-        {/* TOTAL */}
-        <h3>Total: ₹{total}</h3>
-
-        {/* LIST */}
-        <div className="expense-list">
-          {filteredExpenses.map((exp) => (
-            <div key={exp._id} className="expense-item">
-              <span>
-                {exp.title} - ₹{exp.amount} ({exp.category})
-              </span>
-              <div>
-                <button onClick={() => updateExpense(exp._id)}>
-                  ✏️
-                </button>
-                <button
-                  className="delete"
-                  onClick={() => deleteExpense(exp._id)}
-                >
-                  ❌
-                </button>
-              </div>
+          {expenses.map((exp) => (
+            <div key={exp.id} className="expense-item">
+              {exp.title} - ₹{exp.amount}
+              <button
+                className="danger-btn"
+                onClick={() => deleteExpense(exp.id)}
+              >
+                X
+              </button>
             </div>
           ))}
-        </div>
 
-        {/* PIE CHART */}
-        <div style={{ marginTop: 20 }}>
-          <Pie data={chartData} />
+          <h3>Total: ₹{total}</h3>
         </div>
-      </div>
+      )}
+
+      {/* SPLIT PAGE */}
+      {page === "split" && (
+        <div className="card">
+          <button onClick={() => setPage("dashboard")}>
+            ← Back
+          </button>
+
+          <h2>Split Expenses</h2>
+
+          {members.map((member) => (
+            <div key={member.id} className="member-row">
+              <input
+                placeholder="Name"
+                value={member.name}
+                onChange={(e) =>
+                  updateMember(
+                    member.id,
+                    "name",
+                    e.target.value
+                  )
+                }
+              />
+              <input
+                type="number"
+                placeholder="Amount"
+                value={member.spent}
+                onChange={(e) =>
+                  updateMember(
+                    member.id,
+                    "spent",
+                    e.target.value
+                  )
+                }
+              />
+              <button
+                className="danger-btn"
+                onClick={() => removeMember(member.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+
+          <button className="primary-btn" onClick={addMember}>
+            + Add Member
+          </button>
+
+          <h3>Total Group: ₹{splitTotal}</h3>
+          <h3>Each Pays: ₹{perPerson.toFixed(2)}</h3>
+        </div>
+      )}
     </div>
   );
 }
